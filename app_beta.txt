@@ -1,0 +1,98 @@
+import React, { useEffect, useState } from 'react';
+import { Button, FormControl, Input, InputLabel, List, ListItem, ListItemAvatar, ListItemText } from '@material-ui/core';
+import './App.css';
+import Todo from './Todo';
+import db from './firebase';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/firestore';
+
+function App() {
+  const [todos, setTodos] = useState([]);
+  const [input, setInput] = useState('');
+  const [note, setNote] = useState('');
+  const [time, setTime] = useState('');
+
+  useEffect(() => {
+    const intervalID = setInterval(() => {
+      fetch('https://worldtimeapi.org/api/ip')
+        .then(response => response.json())
+        .then(data => {
+          const datetime = new Date(data.datetime);
+          const hours = datetime.getHours().toString().padStart(2, '0');
+          const minutes = datetime.getMinutes().toString().padStart(2, '0');
+          const seconds = datetime.getSeconds().toString().padStart(2, '0');
+          setTime(`${hours}:${minutes}:${seconds}`);
+        })
+        .catch(error => {
+          console.error(error);
+        });
+    }, 1000);
+
+    // Listen for changes to the "todos" collection and update the local state
+    const unsubscribe = db.collection('todos').orderBy('timestamp', 'desc').onSnapshot(snapshot => {
+      setTodos(snapshot.docs.map(doc => ({ id: doc.id, todo: doc.data().todo, note: doc.data().note, timestamp: doc.data().timestamp?.toDate() })));
+    });
+
+    return () => {
+      unsubscribe();
+      clearInterval(intervalID);
+    };
+  }, []);
+
+  const addTodo = (event) => {
+    event.preventDefault();
+
+    db.collection('todos').add({
+      todo: input,
+      note: note,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    setInput('');
+    setNote('');
+  };
+
+  const deleteTodo = (id) => {
+    db.collection('todos').doc(id).delete();
+  };
+
+  const updateTodo = (id, updatedTodo) => {
+    db.collection('todos').doc(id).update(updatedTodo);
+  };
+
+  return (
+    <div className="App">
+      <h1>Atgādinātājs ar konkrētu notikumu piezīmēm🚀!</h1>
+      <h3>Laiks Latvijā</h3>
+      <h3>{time}</h3>
+    
+      <form onSubmit={addTodo}>
+        <FormControl>
+          <InputLabel>✅ Notikums</InputLabel>
+          <Input value={input} onChange={event => setInput(event.target.value)} />
+        </FormControl>
+        <FormControl>
+          <InputLabel>✅ Piezīmes</InputLabel>
+          <Input value={note} onChange={event => setNote(event.target.value)} />
+        </FormControl>
+        <Button disabled={!input} type='submit' variant="contained" color="primary">Pievietot atgādinājumu</Button>
+      </form>
+
+      <List>
+        {todos.map(todo => (
+          <ListItem key={todo.id}>
+            <ListItemAvatar>
+              <Todo />
+            </ListItemAvatar>
+            <ListItemText primary={todo.todo} secondary={todo.note + ' ' + new Date(todo.timestamp).toLocaleString()} />
+            <Button onClick={() => deleteTodo(todo.id)}>Izdzēst</Button>
+            <Button onClick={() => updateTodo(todo.id, {todo: "Updated Todo", note: "Updated Note"})}>Labelot</Button>
+            </ListItem>
+            ))}
+        </List>
+    </div>
+);
+}
+
+export default App;
